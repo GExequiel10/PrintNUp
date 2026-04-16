@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PrintNUp — Múltiples páginas por hoja</title>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- PDF.js desde CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+
+  <!-- ===================== HEADER ===================== -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="logo">
+        <span class="logo-icon">⊞</span>
+        <span class="logo-text">Print<strong>NUp</strong></span>
+      </div>
+      <p class="tagline">Imprimí más, desperdiciá menos — múltiples páginas en una sola hoja A4</p>
+    </div>
+  </header>
+
+  <!-- ===================== CONTROLES ===================== -->
+  <main class="app-main">
+    <section class="controls-bar">
+
+      <!-- Selector de páginas por hoja -->
+      <div class="control-group">
+        <label class="control-label">Páginas por hoja</label>
+        <div class="nup-selector" id="nupSelector">
+          <button class="nup-btn active" data-nup="2">
+            <span class="nup-icon nup-2"></span>
+            <span>2</span>
+          </button>
+          <button class="nup-btn" data-nup="3">
+            <span class="nup-icon nup-3"></span>
+            <span>3</span>
+          </button>
+          <button class="nup-btn" data-nup="4">
+            <span class="nup-icon nup-4"></span>
+            <span>4</span>
+          </button>
+          <button class="nup-btn" data-nup="6">
+            <span class="nup-icon nup-6"></span>
+            <span>6</span>
+          </button>
+          <button class="nup-btn" data-nup="8">
+            <span class="nup-icon nup-8"></span>
+            <span>8</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Orientación -->
+      <div class="control-group">
+        <label class="control-label">Orientación</label>
+        <div class="orientation-selector" id="orientationSelector">
+          <button class="orient-btn active" data-orient="auto" title="Detectar automáticamente">
+            <span>⟳</span> Auto
+          </button>
+          <button class="orient-btn" data-orient="portrait" title="Vertical">
+            <span>▯</span> Vertical
+          </button>
+          <button class="orient-btn" data-orient="landscape" title="Horizontal">
+            <span>▭</span> Horizontal
+          </button>
+        </div>
+      </div>
+
+      <!-- Opciones extra -->
+      <div class="control-group">
+        <label class="control-label">Opciones</label>
+        <div class="options-row">
+          <label class="toggle-label">
+            <input type="checkbox" id="showNumbers" />
+            <span class="toggle-track"></span>
+            <span>Numeración</span>
+          </label>
+          <label class="toggle-label">
+            <input type="checkbox" id="showBorders" checked />
+            <span class="toggle-track"></span>
+            <span>Bordes</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Acciones -->
+      <div class="control-group actions-group">
+        <button class="btn btn-upload" id="btnUpload">
+          <span>↑</span> Subir archivos
+        </button>
+        <input type="file" id="fileInput" multiple accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp" hidden />
+        <button class="btn btn-clear" id="btnClear">
+          <span>✕</span> Limpiar
+        </button>
+        <button class="btn btn-print" id="btnPrint">
+          <span>⎙</span> Imprimir
+        </button>
+      </div>
+
+    </section>
+
+    <!-- ===================== INDICADOR ORIENTACIÓN ===================== -->
+    <div class="orientation-indicator" id="orientationIndicator">
+      <span class="orient-badge" id="orientBadge">▯ Vertical — Auto</span>
+      <span class="slot-count" id="slotCount">0 / 2 espacios usados</span>
+    </div>
+
+    <!-- ===================== ESTADO DE CARGA ===================== -->
+    <div class="loading-overlay" id="loadingOverlay" style="display:none;">
+      <div class="loading-spinner"></div>
+      <p>Procesando archivos…</p>
+    </div>
+
+    <!-- ===================== HOJA A4 PREVIEW ===================== -->
+    <section class="sheet-wrapper" id="sheetWrapper">
+      <div class="sheet" id="sheet">
+        <!-- La grilla se genera dinámicamente por JS -->
+        <div class="sheet-grid" id="sheetGrid"></div>
+      </div>
+    </section>
+
+    <!-- ===================== INSTRUCCIONES ===================== -->
+    <section class="instructions" id="instructions">
+      <div class="instruction-card">
+        <span class="inst-icon">①</span>
+        <p>Elegí cuántas páginas querés por hoja</p>
+      </div>
+      <div class="instruction-card">
+        <span class="inst-icon">②</span>
+        <p>Subí PDFs o imágenes (JPG, PNG…)</p>
+      </div>
+      <div class="instruction-card">
+        <span class="inst-icon">③</span>
+        <p>Ajustá la orientación si es necesario</p>
+      </div>
+      <div class="instruction-card">
+        <span class="inst-icon">④</span>
+        <p>¡Imprimí!</p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ===================== FOOTER ===================== -->
+  <footer class="app-footer">
+    <p>PrintNUp · Sin backend · Funciona 100% en el navegador · <a href="https://github.com/" target="_blank">Ver en GitHub</a></p>
+  </footer>
+
+  <!-- Input oculto para agregar imagen a slot individual -->
+  <input type="file" id="slotFileInput" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.bmp" hidden />
+
+  <script src="app.js"></script>
+</body>
+</html>
