@@ -521,161 +521,248 @@ function clearAll() {
 
 
 /* ============================================================
-   IMPRESIÓN — via iframe oculto con dimensiones absolutas en mm
+   IMPRESIÓN — via Canvas → imagen única → nueva pestaña
    ============================================================
-   Por qué iframe:
-   - window.print() imprime toda la página; el navegador puede
-     ignorar @page y repartir el contenido en varias hojas.
-   - Un iframe con document.write() tiene su propio contexto de
-     impresión: @page se aplica sólo a ese documento, y las
-     dimensiones en mm son absolutas → 1 hoja garantizada.
+   Por qué este enfoque es el más robusto en mobile:
+
+   1. iframe oculto: en Android Chrome, los iframes con
+      visibility:hidden no renderizan imágenes base64 antes
+      de print() → hoja en blanco.
+
+   2. window.open + document.write: Chrome mobile puede
+      bloquear popups si no están en el mismo tick del click.
+
+   3. SOLUCIÓN: dibujar toda la grilla en un <canvas> en
+      memoria → exportar como una sola imagen JPEG → abrir
+      en nueva pestaña via Blob URL (permitido en tick de click).
+      Una imagen única nunca puede partirse en varias páginas.
    ============================================================ */
 
 function printSheet() {
-  const orientation = state.currentOrientation;  // 'portrait' | 'landscape'
+  const orientation = state.currentOrientation;
   const { cols, rows } = getGridLayout(state.nup, orientation);
 
-  // Dimensiones físicas A4 en mm (sin márgenes)
-  const pageW = orientation === 'landscape' ? 297 : 210;
-  const pageH = orientation === 'landscape' ? 210 : 297;
-  const margin = 6; // mm
-  const innerW = pageW - margin * 2;
-  const innerH = pageH - margin * 2;
-  const gap = 2; // mm entre celdas
-  const cellW = (innerW - gap * (cols - 1)) / cols;
-  const cellH = (innerH - gap * (rows - 1)) / rows;
+  // Dimensiones A4 a 150 dpi para buena calidad
+  const DPI   = 150;
+  const MM2PX = DPI / 25.4;
 
-  // Construir celdas HTML
-  let cellsHtml = '';
-  for (let i = 0; i < state.nup; i++) {
-    const slot = state.slots[i];
-    const numHtml = state.showNumbers
-      ? `<div class="num">${i + 1}</div>`
-      : '';
-    const borderStyle = state.showBorders
-      ? 'outline: 0.3mm solid #ccc;'
-      : '';
+  const pageW  = orientation === 'landscape' ? 297 : 210; // mm
+  const pageH  = orientation === 'landscape' ? 210 : 297;
+  const margin = 6;  // mm
+  const gap    = 2;  // mm entre celdas
 
-    if (slot) {
-      cellsHtml += `
-        <div class="cell" style="${borderStyle}">
-          <img src="${slot.imageDataUrl}" />
-          ${numHtml}
-        </div>`;
-    } else {
-      cellsHtml += `
-        <div class="cell" style="${borderStyle} background:#fafafa;">
-          ${numHtml}
-        </div>`;
+  const canvasW = Math.round(pageW  * MM2PX);
+  const canvasH = Math.round(pageH  * MM2PX);
+  const mPx     = Math.round(margin * MM2PX);
+  const gPx     = Math.round(gap    * MM2PX);
+
+  const innerW  = canvasW - mPx * 2;
+  const innerH  = canvasH - mPx * 2;
+  const cellW   = Math.floor((innerW - gPx * (cols - 1)) / cols);
+  const cellH   = Math.floor((innerH - gPx * (rows - 1)) / rows);
+
+  const canvas  = document.createElement('canvas');
+  canvas.width  = canvasW;
+  canvas.height = canvasH;
+  const ctx     = canvas.getContext('2d');
+
+  // Fondo blanco
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvasW, canvasH);
+
+  // Dibuja todas las celdas; llama a done() cuando termina
+  function drawAllCells(done) {
+    let pending = 0;
+
+    for (let i = 0; i < state.nup; i++) {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const x   = mPx + col * (cellW + gPx);
+      const y   = mPx + row * (cellH + gPx);
+
+      // Fondo blanco de celda
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(x, y, cellW, cellH);
+
+      // Borde opcional
+      if (state.showBorders) {
+        ctx.strokeStyle = '#cccccc';
+        ctx.lineWidth   = 1;
+        ctx.strokeRect(x + 0.5, y + 0.5, cellW - 1, cellH - 1);
+      }
+
+      const slot = state.slots[i];
+      if (!slot) {
+        // Celda vacía
+        ctx.fillStyle = '#f8f8f8';
+        ctx.fillRect(x + 2, y + 2, cellW - 4, cellH - 4);
+        continue;
+      }
+
+      pending++;
+      const img = new Image();
+
+      // IIFE para capturar variables por valor en el closure
+      (function capture(imgEl, cx, cy, cw, ch, idx) {
+        function onLoad() {
+          // object-fit: contain manual
+          const imgAR  = imgEl.naturalWidth / imgEl.naturalHeight;
+          const cellAR = cw / ch;
+          let dw, dh, dx, dy;
+          if (imgAR > cellAR) {
+            dw = cw;
+            dh = cw / imgAR;
+          } else {
+            dh = ch;
+            dw = ch * imgAR;
+          }
+          dx = cx + (cw - dw) / 2;
+          dy = cy + (ch - dh) / 2;
+          ctx.drawImage(imgEl, dx, dy, dw, dh);
+
+          // Número opcional
+          if (state.showNumbers) {
+            const fontSize = Math.max(8, Math.round(7 * MM2PX / 3.78));
+            ctx.font         = `${fontSize}px monospace`;
+            ctx.fillStyle    = '#bbbbbb';
+            ctx.textAlign    = 'right';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(String(idx + 1), cx + cw - 4, cy + ch - 4);
+          }
+
+          pending--;
+          if (pending === 0) done();
+        }
+
+        imgEl.onload  = onLoad;
+        imgEl.onerror = function() { pending--; if (pending === 0) done(); };
+        imgEl.src     = slot.imageDataUrl;
+      })(img, x, y, cellW, cellH, i);
     }
+
+    // Sin imágenes (todos slots vacíos)
+    if (pending === 0) done();
   }
 
-  // Documento completo para el iframe
-  const html = `<!DOCTYPE html>
+  // Abrir ventana ANTES de cualquier async (mismo tick del click)
+  // para que los popup blockers no la cierren
+  const printWin = window.open('', '_blank');
+
+  if (!printWin) {
+    alert(
+      'Tu navegador bloqueó la ventana de impresión.\n' +
+      'Permitî las ventanas emergentes para este sitio e intentá de nuevo.'
+    );
+    return;
+  }
+
+  // Mostrar mensaje de espera mientras se procesa el canvas
+  printWin.document.write(`<!DOCTYPE html><html><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Preparando impresión…</title>
+    <style>
+      body { font-family: system-ui,sans-serif; display:flex;
+             align-items:center; justify-content:center;
+             height:100vh; margin:0; background:#e8e3d8; color:#444; }
+      p { font-size:16px; }
+    </style>
+    </head><body><p>Preparando impresión…</p></body></html>`);
+  printWin.document.close();
+
+  // Procesar canvas de forma asíncrona
+  drawAllCells(function() {
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.93);
+
+    const html = `<!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8"/>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Imprimir</title>
 <style>
-  /* Dimensiones exactas A4 — sin auto, sin vh, sin % ambiguos */
   @page {
     size: ${pageW}mm ${pageH}mm;
-    margin: ${margin}mm;
+    margin: 0;
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  * { margin:0; padding:0; box-sizing:border-box; }
   html, body {
     width: ${pageW}mm;
     height: ${pageH}mm;
-    overflow: hidden;
     background: #fff;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(${cols}, ${cellW}mm);
-    grid-template-rows: repeat(${rows}, ${cellH}mm);
-    gap: ${gap}mm;
-    width: ${innerW}mm;
-    height: ${innerH}mm;
-  }
-  .cell {
-    width: ${cellW}mm;
-    height: ${cellH}mm;
-    overflow: hidden;
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #fff;
-  }
-  .cell img {
-    max-width: 100%;
-    max-height: 100%;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
+  img.sheet-img {
     display: block;
+    width: ${pageW}mm;
+    height: ${pageH}mm;
   }
-  .num {
-    position: absolute;
-    bottom: 1mm;
-    right: 1.5mm;
-    font-size: 6pt;
-    color: #bbb;
-    font-family: monospace;
+  /* Vista en pantalla (móvil) */
+  @media screen {
+    html, body {
+      width: 100%;
+      height: auto;
+      min-height: 100vh;
+      background: #e8e3d8;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+      gap: 16px;
+    }
+    img.sheet-img {
+      width: auto;
+      height: auto;
+      max-width: 100%;
+      max-height: 75vh;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.22);
+    }
+    .info {
+      font-family: system-ui, sans-serif;
+      font-size: 13px;
+      color: #666;
+      text-align: center;
+    }
+    .print-btn {
+      padding: 12px 36px;
+      background: #d4420a;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: system-ui, sans-serif;
+    }
+  }
+  @media print {
+    .info, .print-btn { display: none !important; }
+    img.sheet-img {
+      width: ${pageW}mm !important;
+      height: ${pageH}mm !important;
+    }
   }
 </style>
 </head>
 <body>
-  <div class="grid">${cellsHtml}</div>
+  <p class="info">Vista previa lista. Tocá Imprimir para continuar.</p>
+  <img class="sheet-img" src="${dataUrl}" alt="Hoja A4">
+  <button class="print-btn" onclick="window.print()">⎙ Imprimir</button>
+  <script>
+    // Desktop: abrir diálogo automáticamente
+    if (!/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
+      setTimeout(function() { window.print(); }, 300);
+    }
+  </script>
 </body>
 </html>`;
 
-  // Crear iframe oculto, escribir el documento, imprimir y destruir
-  const iframe = document.createElement('iframe');
-  iframe.style.cssText = `
-    position: fixed;
-    top: -9999px;
-    left: -9999px;
-    width: ${pageW}mm;
-    height: ${pageH}mm;
-    border: none;
-    visibility: hidden;
-  `;
-  document.body.appendChild(iframe);
-
-  iframe.contentDocument.open();
-  iframe.contentDocument.write(html);
-  iframe.contentDocument.close();
-
-  // Esperar a que las imágenes carguen dentro del iframe
-  const images = iframe.contentDocument.querySelectorAll('img');
-  let loaded = 0;
-  const total = images.length;
-
-  function doprint() {
-    // Pequeño delay extra para Chrome/mobile
-    setTimeout(() => {
-      iframe.contentWindow.focus();
-      iframe.contentWindow.print();
-      // Destruir iframe tras cerrar el diálogo de impresión
-      setTimeout(() => document.body.removeChild(iframe), 2000);
-    }, 150);
-  }
-
-  if (total === 0) {
-    doprint();
-  } else {
-    images.forEach(img => {
-      if (img.complete) {
-        loaded++;
-        if (loaded === total) doprint();
-      } else {
-        img.addEventListener('load',  () => { loaded++; if (loaded === total) doprint(); });
-        img.addEventListener('error', () => { loaded++; if (loaded === total) doprint(); });
-      }
-    });
-  }
+    // Reemplazar el contenido de la ventana ya abierta
+    printWin.document.open();
+    printWin.document.write(html);
+    printWin.document.close();
+  });
 }
 
 
