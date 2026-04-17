@@ -521,27 +521,161 @@ function clearAll() {
 
 
 /* ============================================================
-   IMPRESIÓN
+   IMPRESIÓN — via iframe oculto con dimensiones absolutas en mm
+   ============================================================
+   Por qué iframe:
+   - window.print() imprime toda la página; el navegador puede
+     ignorar @page y repartir el contenido en varias hojas.
+   - Un iframe con document.write() tiene su propio contexto de
+     impresión: @page se aplica sólo a ese documento, y las
+     dimensiones en mm son absolutas → 1 hoja garantizada.
    ============================================================ */
 
 function printSheet() {
-  // Actualizar @page según orientación activa
-  injectPrintPageCSS(state.currentOrientation);
-  window.print();
-}
+  const orientation = state.currentOrientation;  // 'portrait' | 'landscape'
+  const { cols, rows } = getGridLayout(state.nup, orientation);
 
-/**
- * Inyecta una regla @page dinámica antes de imprimir.
- */
-function injectPrintPageCSS(orientation) {
-  let styleEl = document.getElementById('dynamic-print-style');
-  if (!styleEl) {
-    styleEl = document.createElement('style');
-    styleEl.id = 'dynamic-print-style';
-    document.head.appendChild(styleEl);
+  // Dimensiones físicas A4 en mm (sin márgenes)
+  const pageW = orientation === 'landscape' ? 297 : 210;
+  const pageH = orientation === 'landscape' ? 210 : 297;
+  const margin = 6; // mm
+  const innerW = pageW - margin * 2;
+  const innerH = pageH - margin * 2;
+  const gap = 2; // mm entre celdas
+  const cellW = (innerW - gap * (cols - 1)) / cols;
+  const cellH = (innerH - gap * (rows - 1)) / rows;
+
+  // Construir celdas HTML
+  let cellsHtml = '';
+  for (let i = 0; i < state.nup; i++) {
+    const slot = state.slots[i];
+    const numHtml = state.showNumbers
+      ? `<div class="num">${i + 1}</div>`
+      : '';
+    const borderStyle = state.showBorders
+      ? 'outline: 0.3mm solid #ccc;'
+      : '';
+
+    if (slot) {
+      cellsHtml += `
+        <div class="cell" style="${borderStyle}">
+          <img src="${slot.imageDataUrl}" />
+          ${numHtml}
+        </div>`;
+    } else {
+      cellsHtml += `
+        <div class="cell" style="${borderStyle} background:#fafafa;">
+          ${numHtml}
+        </div>`;
+    }
   }
-  const size = orientation === 'landscape' ? 'A4 landscape' : 'A4 portrait';
-  styleEl.textContent = `@page { size: ${size}; margin: 6mm; }`;
+
+  // Documento completo para el iframe
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8"/>
+<style>
+  /* Dimensiones exactas A4 — sin auto, sin vh, sin % ambiguos */
+  @page {
+    size: ${pageW}mm ${pageH}mm;
+    margin: ${margin}mm;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: ${pageW}mm;
+    height: ${pageH}mm;
+    overflow: hidden;
+    background: #fff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(${cols}, ${cellW}mm);
+    grid-template-rows: repeat(${rows}, ${cellH}mm);
+    gap: ${gap}mm;
+    width: ${innerW}mm;
+    height: ${innerH}mm;
+  }
+  .cell {
+    width: ${cellW}mm;
+    height: ${cellH}mm;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+  }
+  .cell img {
+    max-width: 100%;
+    max-height: 100%;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+  .num {
+    position: absolute;
+    bottom: 1mm;
+    right: 1.5mm;
+    font-size: 6pt;
+    color: #bbb;
+    font-family: monospace;
+  }
+</style>
+</head>
+<body>
+  <div class="grid">${cellsHtml}</div>
+</body>
+</html>`;
+
+  // Crear iframe oculto, escribir el documento, imprimir y destruir
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = `
+    position: fixed;
+    top: -9999px;
+    left: -9999px;
+    width: ${pageW}mm;
+    height: ${pageH}mm;
+    border: none;
+    visibility: hidden;
+  `;
+  document.body.appendChild(iframe);
+
+  iframe.contentDocument.open();
+  iframe.contentDocument.write(html);
+  iframe.contentDocument.close();
+
+  // Esperar a que las imágenes carguen dentro del iframe
+  const images = iframe.contentDocument.querySelectorAll('img');
+  let loaded = 0;
+  const total = images.length;
+
+  function doprint() {
+    // Pequeño delay extra para Chrome/mobile
+    setTimeout(() => {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+      // Destruir iframe tras cerrar el diálogo de impresión
+      setTimeout(() => document.body.removeChild(iframe), 2000);
+    }, 150);
+  }
+
+  if (total === 0) {
+    doprint();
+  } else {
+    images.forEach(img => {
+      if (img.complete) {
+        loaded++;
+        if (loaded === total) doprint();
+      } else {
+        img.addEventListener('load',  () => { loaded++; if (loaded === total) doprint(); });
+        img.addEventListener('error', () => { loaded++; if (loaded === total) doprint(); });
+      }
+    });
+  }
 }
 
 
