@@ -7,20 +7,20 @@
 :root {
   --bg:          #f0ece4;
   --surface:     #faf8f4;
-  --surface2:    #e8e3d8;
-  --ink:         #1a1814;
-  --ink-mid:     #4a4640;
-  --ink-light:   #8a8478;
-  --accent:      #d4420a;
-  --accent-dark: #a33208;
+  --surface2:    #e2ddd4;
+  --ink:         #111010;
+  --ink-mid:     #2e2b28;
+  --ink-light:   #5c574f;
+  --accent:      #c23a08;
+  --accent-dark: #8f2a05;
   --accent-pale: #fde8df;
   --green:       #2a7a4b;
   --green-pale:  #d4f0e0;
-  --border:      #ccc7bc;
-  --shadow:      rgba(26, 24, 20, 0.12);
+  --border:      #b8b2a7;
+  --shadow:      rgba(26, 24, 20, 0.15);
   --radius:      6px;
   --font-display: 'Georgia', 'Times New Roman', serif;
-  --font-body:   'Courier New', 'Courier', monospace;
+  --font-body:   system-ui, -apple-system, sans-serif;
   --font-ui:     system-ui, -apple-system, sans-serif;
 
   /* A4 en pantalla */
@@ -124,12 +124,12 @@ body {
 }
 
 .control-label {
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--ink-light);
-  font-family: var(--font-body);
+  letter-spacing: 0.08em;
+  color: var(--ink-mid);
+  font-family: var(--font-ui);
 }
 
 /* ── NUp selector ── */
@@ -148,8 +148,8 @@ body {
   border: 1.5px solid var(--border);
   border-radius: var(--radius);
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
   color: var(--ink-mid);
   transition: all 0.15s ease;
   font-family: var(--font-ui);
@@ -207,13 +207,13 @@ body {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 7px 12px;
+  padding: 7px 14px;
   background: var(--surface2);
   border: 1.5px solid var(--border);
   border-radius: var(--radius);
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   color: var(--ink-mid);
   transition: all 0.15s ease;
   font-family: var(--font-ui);
@@ -243,7 +243,8 @@ body {
   align-items: center;
   gap: 8px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--ink-mid);
   user-select: none;
 }
@@ -287,24 +288,27 @@ body {
 .actions-group {
   flex-direction: row;
   gap: 10px;
-  align-items: flex-end;
-  margin-left: auto;
+  align-items: center;
+  margin-left: auto;          /* desktop: empujar a la derecha */
+  flex-wrap: nowrap;
 }
 
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 9px 18px;
+  padding: 10px 18px;
   border: 1.5px solid;
   border-radius: var(--radius);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.15s ease;
   font-family: var(--font-ui);
   letter-spacing: 0.02em;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .btn-upload {
@@ -353,15 +357,17 @@ body {
 }
 
 .orient-badge {
-  font-weight: 700;
-  font-family: var(--font-body);
+  font-weight: 800;
+  font-family: var(--font-ui);
   color: var(--accent);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .slot-count {
   color: var(--ink-light);
-  font-family: var(--font-body);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 /* ── Loading overlay ── */
@@ -588,15 +594,65 @@ body {
 /* ── Responsive ── */
 @media (max-width: 768px) {
   :root { --sheet-scale: 0.48; }
-  .controls-bar { gap: 16px; padding: 16px; }
-  .actions-group { margin-left: 0; }
-  .nup-selector { flex-wrap: wrap; }
+
+  .controls-bar {
+    gap: 20px;
+    padding: 16px;
+    flex-direction: column;   /* cada grupo en su propia fila */
+    align-items: stretch;
+  }
+
+  .control-group {
+    width: 100%;
+  }
+
+  /* Los grupos de botones de selector ocupan toda la fila */
+  .nup-selector,
+  .orientation-selector {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .nup-btn,
+  .orient-btn {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Acciones: fila completa, todos los botones visibles */
+  .actions-group {
+    margin-left: 0;
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+  }
+
+  .btn {
+    width: 100%;
+    justify-content: center;
+    padding: 11px 8px;
+    font-size: 13px;
+  }
+
   .header-inner { gap: 12px; }
   .tagline { display: none; }
 }
 
 @media (max-width: 480px) {
   :root { --sheet-scale: 0.38; }
+
+  .actions-group {
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+  }
+
+  /* Botón Imprimir ocupa las dos columnas en mobile pequeño */
+  .btn-print {
+    grid-column: 1 / -1;
+    padding: 13px;
+    font-size: 15px;
+  }
 }
 
 
